@@ -2,10 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
-//StatefulWidget vie si pamätať a meniť stav → voláme setState().
 class GoogleMapPage extends StatefulWidget {
   const GoogleMapPage({super.key});
-//Každý StatefulWidget musí mať metódu createState().
+
   @override
   State<GoogleMapPage> createState() => _GoogleMapPageState();
 }
@@ -21,23 +20,59 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   final Set<Marker> _markers = {};
   int _nextId = 1;
 
+  bool _isPicking = false; // režim výberu
+  LatLng? _cameraCenter;   // sledujeme center kamery
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Google Maps — Zoznamko')),
-      body: GoogleMap(
-        initialCameraPosition: _initialCamera,
-        onMapCreated: (controller) => _controller = controller,
-        myLocationEnabled: false,
-        myLocationButtonEnabled: false,
-        markers: _markers,
-        onTap: _onMapTap, // ťuknutím pridáš pin
+      body: Stack(
+        children: [
+          GoogleMap(
+            initialCameraPosition: _initialCamera,
+            onMapCreated: (controller) => _controller = controller,
+            onCameraMove: (pos) => _cameraCenter = pos.target,
+            markers: _markers,
+            onTap: _onMapTap,
+          ),
+
+          // stredový pin (len ikona, nehýbe sa, hýbe sa mapa pod ním)
+          if (_isPicking)
+            const Align(
+              alignment: Alignment.center,
+              child: Padding(
+                padding: EdgeInsets.only(bottom: 40), // posunie ikonu hore
+                child: Icon(Icons.location_pin, size: 50, color: Colors.red),
+              ),
+            ),
+
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        icon: const Icon(Icons.add_location_alt),
-        label: const Text('Pridať pin (v strede)'),
-        onPressed: _addMarkerAtCenter,
+        icon: Icon(_isPicking ? Icons.check : Icons.event),
+        label: Text(_isPicking ? 'OK' : 'Vytvoriť udalosť'),
+        onPressed: () {
+          if (_isPicking) {
+            // potvrdiť výber
+            if (_cameraCenter != null) {
+              final id = 'marker_${_nextId++}';
+              _markers.add(
+                Marker(
+                  markerId: MarkerId(id),
+                  position: _cameraCenter!,
+                  infoWindow: InfoWindow(title: 'Udalosť $id'),
+                ),
+              );
+            }
+            setState(() => _isPicking = false);
+          } else {
+            // zapnúť výber
+            setState(() => _isPicking = true);
+          }
+        },
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 
@@ -46,21 +81,11 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     final marker = Marker(
       markerId: MarkerId(id),
       position: pos,
-      infoWindow: InfoWindow(title: 'Miesto $id', snippet: '${pos.latitude.toStringAsFixed(6)}, ${pos.longitude.toStringAsFixed(6)}'),
+      infoWindow: InfoWindow(
+        title: 'Miesto $id',
+        snippet: '${pos.latitude.toStringAsFixed(6)}, ${pos.longitude.toStringAsFixed(6)}',
+      ),
       onTap: () => _showPlaceSheet(pos, 'Miesto $id', 'Pridané ťuknutím'),
-    );
-    setState(() => _markers.add(marker));
-  }
-
-  void _addMarkerAtCenter() async {
-    if (_controller == null) return;
-    final center = await _controller!.getLatLng(ScreenCoordinate(x: MediaQuery.of(context).size.width ~/ 2, y: MediaQuery.of(context).size.height ~/ 2));
-    final id = 'marker_${_nextId++}';
-    final marker = Marker(
-      markerId: MarkerId(id),
-      position: center,
-      infoWindow: InfoWindow(title: 'Moje miesto $id'),
-      onTap: () => _showPlaceSheet(center, 'Moje miesto $id', 'Pridané v strede'),
     );
     setState(() => _markers.add(marker));
   }
@@ -84,10 +109,13 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(onPressed: () => Navigator.pop(context), child: const Text('Zatvoriť')),
-                ElevatedButton(onPressed: () {
-                  Navigator.pop(context);
-                  // sem môžeš pridať edit / uloženie do DB / navigáciu
-                }, child: const Text('Upraviť')),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    // tu môžeš pridať edit / uloženie do DB / navigáciu
+                  },
+                  child: const Text('Upraviť'),
+                ),
               ],
             ),
           ],
