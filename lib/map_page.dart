@@ -5,6 +5,8 @@ import 'dart:async';
 import 'event.dart'; // import novej triedy Event
 import 'event_create_information.dart';
 import 'event_detail_page.dart';
+import 'place_autocomplete_field.dart';
+
 
 class GoogleMapPage extends StatefulWidget {
   const GoogleMapPage({super.key});
@@ -38,52 +40,22 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   bool _isPicking = false;
   LatLng? _cameraCenter;
 
-  final TextEditingController _searchCtrl = TextEditingController();
-  final FocusNode _searchFocus = FocusNode();
-
-  late GooglePlace _googlePlace;
-  List<AutocompletePrediction> _predictions = [];
-  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
-    _googlePlace = GooglePlace(
-        "YOUR_API_KEY_HERE"); // vlož svoj API key
-    _searchCtrl.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
-    _debounce?.cancel();
-    _searchCtrl.dispose();
-    _searchFocus.dispose();
     super.dispose();
   }
 
-  void _onSearchChanged() {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 300), () async {
-      final text = _searchCtrl.text.trim();
-      if (text.isEmpty) {
-        setState(() => _predictions = []);
-        return;
-      }
-      final result = await _googlePlace.autocomplete.get(
-        text,
-        language: "sk",
-        components: [Component("country", "sk")],
-        types: "address",
-      );
-      setState(() {
-        _predictions = result?.predictions ?? [];
-      });
-    });
-  }
-
-
-  Future<void> _selectPrediction(AutocompletePrediction p) async {
-    final details = await _googlePlace.details.get(p.placeId!);
+  // Pridajte túto metódu do _GoogleMapPageState
+  Future<void> _onPredictionSelected(AutocompletePrediction p) async {
+    // Vytvorte si inštanciu GooglePlace tu, len pre túto metódu
+    final googlePlace = GooglePlace("YOUR_API_KEY_HERE");
+    final details = await googlePlace.details.get(p.placeId!);
     final loc = details?.result?.geometry?.location;
     _selectedAdress = details?.result?.formattedAddress;
 
@@ -94,11 +66,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
     setState(() {
       _cameraCenter = target;
-      _predictions = [];
-      _searchCtrl.text = p.description ?? "";
     });
-
-    _searchFocus.unfocus();
   }
 
 
@@ -138,7 +106,6 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         _markers.add(marker);
         _markerEventMap[marker.markerId] = updatedEvent;
         _isPicking = false;
-        _predictions = [];
       });
     }
   }
@@ -148,76 +115,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Google Maps — Zoznamko')),
-      body: Stack(
-        children: [
-          GoogleMap(
-            initialCameraPosition: _initialCamera,
-            onMapCreated: (controller) => _controller = controller,
-            onCameraMove: (pos) => _cameraCenter = pos.target,
-            markers: _markers,
-          ),
 
-          if (_isPicking)
-            const Align(
-              alignment: Alignment.center,
-              child: Padding(
-                padding: EdgeInsets.only(bottom: 40),
-                child: Icon(Icons.location_pin, size: 50, color: Colors.red),
-              ),
-            ),
-
-          if (_isPicking)
-            Positioned(
-              top: 16,
-              left: 16,
-              right: 16,
-              child: SafeArea(
-                child: Material(
-                  elevation: 4,
-                  borderRadius: BorderRadius.circular(12),
-                  clipBehavior: Clip.antiAlias,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextField(
-                        controller: _searchCtrl,
-                        focusNode: _searchFocus,
-                        decoration: const InputDecoration(
-                          hintText: 'Zadaj adresu...',
-                          prefixIcon: Icon(Icons.search),
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 14),
-                        ),
-                      ),
-                      if (_predictions.isNotEmpty)
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxHeight: 220),
-                          child: ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: _predictions.length,
-                            itemBuilder: (context, i) {
-                              final p = _predictions[i];
-                              return ListTile(
-                                dense: true,
-                                leading: const Icon(Icons.place),
-                                title: Text(p.structuredFormatting?.mainText ??
-                                    p.description ?? ''),
-                                subtitle: Text(
-                                    p.structuredFormatting?.secondaryText ??
-                                        ''),
-                                onTap: () => _selectPrediction(p),
-                              );
-                            },
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+      // TIETO DVA PARAMETRE PATRIA SEM:
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
@@ -244,7 +144,38 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         ],
       ),
 
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      // A SEM PATRÍ BODY SO STACK-om:
+      body: Stack(
+        children: [
+          GoogleMap(
+            initialCameraPosition: _initialCamera,
+            onMapCreated: (controller) => _controller = controller,
+            onCameraMove: (pos) => _cameraCenter = pos.target,
+            markers: _markers,
+          ),
+          if (_isPicking)
+            const Align(
+              alignment: Alignment.center,
+              child: Padding(
+                padding: EdgeInsets.only(bottom: 40),
+                child: Icon(Icons.location_pin, size: 50, color: Colors.red),
+              ),
+            ),
+          if (_isPicking)
+            Positioned(
+              top: 16,
+              left: 16,
+              right: 16,
+              child: SafeArea(
+                child: PlaceAutocompleteField(
+                  onPredictionSelected: (prediction) {
+                    _onPredictionSelected(prediction);
+                  },
+                ),
+              ),
+            ),
+        ], // <-- TOTO JE KONIEC `children` PRE STACK
+      ),
     );
   }
 
