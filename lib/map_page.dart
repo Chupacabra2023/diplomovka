@@ -4,6 +4,7 @@ import 'package:google_place/google_place.dart';
 import 'dart:async';
 import 'event.dart'; // import novej triedy Event
 import 'event_create_information.dart';
+import 'event_detail_page.dart';
 
 class GoogleMapPage extends StatefulWidget {
   const GoogleMapPage({super.key});
@@ -20,9 +21,18 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     zoom: 13,
   );
 
+  String? _filterName;
+  String? _filterCategory;
+  int? _filterParticipants;
+  double? _filterMaxPrice;
+  String? _filterVisibility;
+  DateTime? _filterDateFrom;
+  DateTime? _filterDateTo;
   final Set<Marker> _markers = {};
-  int _nextId = 1;
+  final Map<MarkerId, Event> _markerEventMap = {};
 
+  int _nextId = 1;
+  String? _selectedAdress = "";
   //this is added  by us
   bool _isPicking = false;
   LatLng? _cameraCenter;
@@ -51,101 +61,87 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
   void _onSearchChanged() {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 350), () async {
+    _debounce = Timer(const Duration(milliseconds: 300), () async {
       final text = _searchCtrl.text.trim();
       if (text.isEmpty) {
         setState(() => _predictions = []);
         return;
       }
-      final res = await _googlePlace.autocomplete.get(
+      final result = await _googlePlace.autocomplete.get(
         text,
         language: "sk",
-        components: [Component("country", "sk"), Component("country", "cz")],
+        components: [Component("country", "sk")],
+        types: "address",
       );
-      setState(() => _predictions = res?.predictions ?? []);
+      setState(() {
+        _predictions = result?.predictions ?? [];
+      });
     });
   }
 
+
   Future<void> _selectPrediction(AutocompletePrediction p) async {
-    final det = await _googlePlace.details.get(p.placeId!);
-    final loc = det?.result?.geometry?.location;
+    final details = await _googlePlace.details.get(p.placeId!);
+    final loc = details?.result?.geometry?.location;
+    _selectedAdress = details?.result?.formattedAddress;
+
     if (loc == null) return;
 
     final target = LatLng(loc.lat!, loc.lng!);
     await _controller?.animateCamera(CameraUpdate.newLatLngZoom(target, 16));
+
     setState(() {
       _cameraCenter = target;
       _predictions = [];
-      _searchCtrl.text = det?.result?.name ?? p.description ?? "";
+      _searchCtrl.text = p.description ?? "";
     });
+
     _searchFocus.unfocus();
   }
 
-  void _confirmEvent() {
+
+  void _confirmEvent() async {
     if (_cameraCenter == null) return;
 
     final id = 'event_${_nextId++}';
-    final newEvent = Event(
+    final tempEvent = Event(
       id: id,
       title: 'Udalosť $id',
       latitude: _cameraCenter!.latitude,
       longitude: _cameraCenter!.longitude,
       createdAt: DateTime.now(),
+      place: _selectedAdress ?? '',
     );
 
-    setState(() {
-      _markers.add(newEvent.toMarker(onTap: _showEventSheet));
-      _isPicking = false;
-      _predictions = [];
-    });
-    Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => EventCreationInformation(event: newEvent),
-        ),
-    );
-  }
-  void _showEventSheet(Event event) {
-    return null;
-  }
-  /*void _showEventSheet(Event event) {
-    showModalBottomSheet(
-      context: context,
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(event.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text('Lat: ${event.latitude.toStringAsFixed(6)}'),
-            Text('Lng: ${event.longitude.toStringAsFixed(6)}'),
-            const SizedBox(height: 8),
-            Text('Vytvorené: ${event.createdAt}'),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Zavrieť'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    // sem môžeš pridať napr. edit udalosti
-                  },
-                  child: const Text('Upraviť'),
-                ),
-              ],
-            ),
-          ],
-        ),
+    final updatedEvent = await Navigator.push<Event>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EventCreationInformation(event: tempEvent),
       ),
     );
+
+    if (updatedEvent != null) {
+      setState(() {
+        final marker = updatedEvent.toMarker(
+          onTap: (event) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => EventDetailPage(event: event),
+              ),
+            );
+          },
+        );
+
+        _markers.add(marker);
+        _markerEventMap[marker.markerId] = updatedEvent;
+        _isPicking = false;
+        _predictions = [];
+      });
+    }
   }
-*/
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -186,7 +182,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                         controller: _searchCtrl,
                         focusNode: _searchFocus,
                         decoration: const InputDecoration(
-                          hintText: 'Vyhľadaj adresu…',
+                          hintText: 'Zadaj adresu...',
                           prefixIcon: Icon(Icons.search),
                           border: InputBorder.none,
                           contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
@@ -195,11 +191,10 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                       if (_predictions.isNotEmpty)
                         ConstrainedBox(
                           constraints: const BoxConstraints(maxHeight: 220),
-                          child: ListView.separated(
+                          child: ListView.builder(
                             shrinkWrap: true,
                             itemCount: _predictions.length,
-                            separatorBuilder: (_, __) => const Divider(height: 1),
-                            itemBuilder: (ctx, i) {
+                            itemBuilder: (context, i) {
                               final p = _predictions[i];
                               return ListTile(
                                 dense: true,
@@ -218,18 +213,324 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
             ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        icon: Icon(_isPicking ? Icons.check : Icons.event),
-        label: Text(_isPicking ? 'OK' : 'Vytvoriť udalosť'),
-        onPressed: () {
-          if (_isPicking) {
-            _confirmEvent();
-          } else {
-            setState(() => _isPicking = true);
-          }
-        },
+      floatingActionButton: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: "createEvent",
+            icon: Icon(_isPicking ? Icons.check : Icons.event),
+            label: Text(_isPicking ? 'OK' : 'Vytvoriť udalosť'),
+            onPressed: () {
+              if (_isPicking) {
+                _confirmEvent();
+              } else {
+                setState(() => _isPicking = true);
+              }
+            },
+          ),
+          FloatingActionButton.extended(
+            heroTag: "findEvent",
+            icon: const Icon(Icons.search),
+            label: const Text('Nájsť udalosť'),
+            onPressed: () {
+              _openFilterSheet(); // otvorí filter
+            },
+          ),
+        ],
       ),
+
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
+
+  }
+  //event filtering
+  void _openFilterSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        String selectedCategory = '';
+        String selectedVisibility = 'public';
+        double maxPrice = 100.0;
+        String eventName = '';
+        int participants = 0;
+        DateTime? dateFrom;
+        DateTime? dateTo;
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            Future<void> pickDate(bool isFrom) async {
+              final date = await showDatePicker(
+                context: context,
+                initialDate: DateTime.now(),
+                firstDate: DateTime(2020),
+                lastDate: DateTime(2030),
+              );
+              if (date != null) {
+                final time = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay.now(),
+                );
+                if (time != null) {
+                  final fullDate = DateTime(
+                    date.year,
+                    date.month,
+                    date.day,
+                    time.hour,
+                    time.minute,
+                  );
+                  setModalState(() {
+                    if (isFrom) {
+                      dateFrom = fullDate;
+                    } else {
+                      dateTo = fullDate;
+                    }
+                  });
+                }
+              }
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 16,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "🔍 Filtrovať udalosti",
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // NÁZOV
+                    const Text("Názov udalosti"),
+                    TextField(
+                      decoration: const InputDecoration(
+                        hintText: "Zadaj názov...",
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (val) => setModalState(() => eventName = val),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // KATEGÓRIA
+                    const Text("Kategória"),
+                    DropdownButton<String>(
+                      value: selectedCategory.isEmpty ? null : selectedCategory,
+                      hint: const Text("Vyber kategóriu"),
+                      items: ['Hudba', 'Šport', 'Kultúra', 'Iné']
+                          .map((cat) =>
+                          DropdownMenuItem(value: cat, child: Text(cat)))
+                          .toList(),
+                      onChanged: (val) =>
+                          setModalState(() => selectedCategory = val ?? ''),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // POČET OSÔB
+                    Text("Počet osôb: $participants"),
+                    Slider(
+                      value: participants.toDouble(),
+                      min: 0,
+                      max: 100,
+                      divisions: 100,
+                      label: "$participants",
+                      onChanged: (val) =>
+                          setModalState(() => participants = val.toInt()),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // DATUM OD - DO
+                    const Text("Dátum a čas"),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => pickDate(true),
+                            child: Text(dateFrom == null
+                                ? "Vyber OD"
+                                : "Od: ${dateFrom!.day}.${dateFrom!.month}. ${dateFrom!.hour}:${dateFrom!.minute.toString().padLeft(2, '0')}"),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => pickDate(false),
+                            child: Text(dateTo == null
+                                ? "Vyber DO"
+                                : "Do: ${dateTo!.day}.${dateTo!.month}. ${dateTo!.hour}:${dateTo!.minute.toString().padLeft(2, '0')}"),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // CENA
+                    Text("Max cena: ${maxPrice.toStringAsFixed(0)} €"),
+                    Slider(
+                      value: maxPrice,
+                      min: 0,
+                      max: 500,
+                      divisions: 50,
+                      label: "${maxPrice.toStringAsFixed(0)} €",
+                      onChanged: (val) => setModalState(() => maxPrice = val),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // VIDITEĽNOSŤ
+                    const Text("Viditeľnosť"),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: RadioListTile(
+                            title: const Text("Verejná"),
+                            value: 'public',
+                            groupValue: selectedVisibility,
+                            onChanged: (val) =>
+                                setModalState(() => selectedVisibility = val!),
+                          ),
+                        ),
+                        Expanded(
+                          child: RadioListTile(
+                            title: const Text("Súkromná"),
+                            value: 'private',
+                            groupValue: selectedVisibility,
+                            onChanged: (val) =>
+                                setModalState(() => selectedVisibility = val!),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // TLAČIDLÁ
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text("Zrušiť"),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _applyFilter(
+                              name: eventName,
+                              category: selectedCategory,
+                              participants: participants,
+                              maxPrice: maxPrice,
+                              visibility: selectedVisibility,
+                              dateFrom: dateFrom,
+                              dateTo: dateTo,
+                            );
+                            print(
+                                "Filter → Názov: $eventName, Kat: $selectedCategory, Osoby: $participants, Cena ≤ $maxPrice €, Vid: $selectedVisibility, Od: $dateFrom, Do: $dateTo");
+                          },
+                          child: const Text("Použiť"),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+  void _applyFilter({
+    String? name,
+    String? category,
+    int? participants,
+    double? maxPrice,
+    String? visibility,
+    DateTime? dateFrom,
+    DateTime? dateTo,
+  }) {
+    setState(() {
+      _filterName = name;
+      _filterCategory = category;
+      _filterParticipants = participants;
+      _filterMaxPrice = maxPrice;
+      _filterVisibility = visibility;
+      _filterDateFrom = dateFrom;
+      _filterDateTo = dateTo;
+    });
+
+    final allEvents = _markerEventMap.values.toList();
+
+    // 2. Aplikujeme filtre a získame zoznam vyfiltrovaných udalostí
+    final filteredEvents = allEvents.where((event) {
+      // Podmienka pre názov (ak je zadaný)
+      if (name.isNotEmpty && !event.title.toLowerCase().contains(name.toLowerCase())) {
+        return false; // Nespĺňa podmienku názvu
+      }
+
+      // Podmienka pre kategóriu (ak je zadaná)
+      // Predpokladáme, že vaša trieda Event má pole 'category'
+      if (category.isNotEmpty && event.category != category) {
+        return false; // Nespĺňa podmienku kategórie
+      }
+
+      // Podmienka pre počet účastníkov
+      // Predpokladáme, že Event má pole 'maxParticipants'
+      if (participants > 0 && (event.maxParticipants ?? 0) < participants) {
+        return false; // Hľadáme udalosť pre viac ľudí, ako je maximum
+      }
+
+      // Podmienka pre cenu
+      // Predpokladáme, že Event má pole 'price'
+      if ((event.price ?? 0) > maxPrice) {
+        return false; // Cena je vyššia ako maximálna povolená
+      }
+
+      // Podmienka pre viditeľnosť
+      // Predpokladáme, že Event má pole 'visibility' ('public' alebo 'private')
+      if (event.visibility != visibility) {
+        return false; // Nespĺňa podmienku viditeľnosti
+      }
+
+      // Podmienka pre dátum OD (ak je zadaný)
+      // Predpokladáme, že Event má pole 'eventDate'
+      if (dateFrom != null && event.eventDate!.isBefore(dateFrom)) {
+        return false; // Udalosť sa koná pred požadovaným dátumom
+      }
+
+      // Podmienka pre dátum DO (ak je zadaný)
+      if (dateTo != null && event.eventDate!.isAfter(dateTo)) {
+        return false; // Udalosť sa koná po požadovanom dátume
+      }
+
+      // Ak udalosť prešla všetkými kontrolami, zahrnieme ju do výsledku
+      return true;
+    }).toList();
+
+    // 3. Vytvoríme nový set markerov z vyfiltrovaných udalostí
+    final Set<Marker> filteredMarkers = filteredEvents.map((event) {
+      return event.toMarker(onTap: (e) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => EventDetailPage(event: e)),
+        );
+      });
+    }).toSet();
+
+    // 4. Aktualizujeme stav, aby sa mapa prekreslila s novými markermi
+    setState(() {
+      _markers.clear();
+      _markers.addAll(filteredMarkers);
+    });
   }
 }
+
+

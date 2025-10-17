@@ -2,11 +2,19 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter/material.dart';
 
 class Event {
-  final String id;
-  final String title;
-  final double latitude;
-  final double longitude;
-  final DateTime createdAt;
+  String id;
+  String title;
+  double latitude;
+  double longitude;
+  DateTime createdAt;
+  String place;
+  String description;
+  DateTime? dateFrom;
+  DateTime? dateTo;
+  double price;
+  int participants;
+  String visibility;
+  String category;
 
   Event({
     required this.id,
@@ -14,6 +22,14 @@ class Event {
     required this.latitude,
     required this.longitude,
     required this.createdAt,
+    required this.place,
+    this.description = '',
+    this.dateFrom,
+    this.dateTo,
+    this.price = 0.0,
+    this.participants = 0,
+    this.visibility = 'public',
+    this.category = '',
   });
 
   Marker toMarker({void Function(Event)? onTap}) {
@@ -34,6 +50,14 @@ class Event {
       'latitude': latitude,
       'longitude': longitude,
       'createdAt': createdAt.toIso8601String(),
+      'place': place,
+      'description': description,
+      'dateFrom': dateFrom?.toIso8601String(),
+      'dateTo': dateTo?.toIso8601String(),
+      'price': price,
+      'participants': participants,
+      'visibility': visibility,
+      'category': category,
     };
   }
 
@@ -44,6 +68,14 @@ class Event {
       latitude: map['latitude'],
       longitude: map['longitude'],
       createdAt: DateTime.parse(map['createdAt']),
+      place: map['place'],
+      description: map['description'] ?? '',
+      dateFrom: map['dateFrom'] != null ? DateTime.parse(map['dateFrom']) : null,
+      dateTo: map['dateTo'] != null ? DateTime.parse(map['dateTo']) : null,
+      price: (map['price'] ?? 0).toDouble(),
+      participants: (map['participants'] ?? 0).toInt(),
+      visibility: map['visibility'] ?? 'public',
+      category: map['category'] ?? '',
     );
   }
 }
