@@ -33,6 +33,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
   int _nextId = 1;
   String? _selectedAdress = "";
+
   //this is added  by us
   bool _isPicking = false;
   LatLng? _cameraCenter;
@@ -47,7 +48,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   @override
   void initState() {
     super.initState();
-    _googlePlace = GooglePlace("YOUR_API_KEY_HERE"); // vlož svoj API key
+    _googlePlace = GooglePlace(
+        "YOUR_API_KEY_HERE"); // vlož svoj API key
     _searchCtrl.addListener(_onSearchChanged);
   }
 
@@ -142,7 +144,6 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   }
 
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -185,7 +186,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                           hintText: 'Zadaj adresu...',
                           prefixIcon: Icon(Icons.search),
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 14),
                         ),
                       ),
                       if (_predictions.isNotEmpty)
@@ -199,8 +201,11 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                               return ListTile(
                                 dense: true,
                                 leading: const Icon(Icons.place),
-                                title: Text(p.structuredFormatting?.mainText ?? p.description ?? ''),
-                                subtitle: Text(p.structuredFormatting?.secondaryText ?? ''),
+                                title: Text(p.structuredFormatting?.mainText ??
+                                    p.description ?? ''),
+                                subtitle: Text(
+                                    p.structuredFormatting?.secondaryText ??
+                                        ''),
                                 onTap: () => _selectPrediction(p),
                               );
                             },
@@ -241,8 +246,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
-
   }
+
   //event filtering
   void _openFilterSheet() {
     showModalBottomSheet(
@@ -298,7 +303,10 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                 left: 16,
                 right: 16,
                 top: 16,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+                bottom: MediaQuery
+                    .of(context)
+                    .viewInsets
+                    .bottom + 16,
               ),
               child: SingleChildScrollView(
                 child: Column(
@@ -307,7 +315,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                   children: [
                     const Text(
                       "🔍 Filtrovať udalosti",
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 16),
 
@@ -358,7 +367,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                             onPressed: () => pickDate(true),
                             child: Text(dateFrom == null
                                 ? "Vyber OD"
-                                : "Od: ${dateFrom!.day}.${dateFrom!.month}. ${dateFrom!.hour}:${dateFrom!.minute.toString().padLeft(2, '0')}"),
+                                : "Od: ${dateFrom!.day}.${dateFrom!
+                                .month}. ${dateFrom!.hour}:${dateFrom!.minute
+                                .toString().padLeft(2, '0')}"),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -367,7 +378,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                             onPressed: () => pickDate(false),
                             child: Text(dateTo == null
                                 ? "Vyber DO"
-                                : "Do: ${dateTo!.day}.${dateTo!.month}. ${dateTo!.hour}:${dateTo!.minute.toString().padLeft(2, '0')}"),
+                                : "Do: ${dateTo!.day}.${dateTo!
+                                .month}. ${dateTo!.hour}:${dateTo!.minute
+                                .toString().padLeft(2, '0')}"),
                           ),
                         ),
                       ],
@@ -448,6 +461,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
       },
     );
   }
+
   void _applyFilter({
     String? name,
     String? category,
@@ -467,70 +481,75 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
       _filterDateTo = dateTo;
     });
 
+    // Prejdeme všetky eventy
     final allEvents = _markerEventMap.values.toList();
 
-    // 2. Aplikujeme filtre a získame zoznam vyfiltrovaných udalostí
-    final filteredEvents = allEvents.where((event) {
-      // Podmienka pre názov (ak je zadaný)
-      if (name.isNotEmpty && !event.title.toLowerCase().contains(name.toLowerCase())) {
-        return false; // Nespĺňa podmienku názvu
+    // Nájdi markery, ktoré spĺňajú filter
+    final Set<Marker> visibleMarkers = {};
+    for (final event in allEvents) {
+      final matches = _matchesFilter(event);
+      if (matches) {
+        final marker = event.toMarker(onTap: (e) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => EventDetailPage(event: e)),
+          );
+        });
+        visibleMarkers.add(marker);
       }
+    }
 
-      // Podmienka pre kategóriu (ak je zadaná)
-      // Predpokladáme, že vaša trieda Event má pole 'category'
-      if (category.isNotEmpty && event.category != category) {
-        return false; // Nespĺňa podmienku kategórie
-      }
-
-      // Podmienka pre počet účastníkov
-      // Predpokladáme, že Event má pole 'maxParticipants'
-      if (participants > 0 && (event.maxParticipants ?? 0) < participants) {
-        return false; // Hľadáme udalosť pre viac ľudí, ako je maximum
-      }
-
-      // Podmienka pre cenu
-      // Predpokladáme, že Event má pole 'price'
-      if ((event.price ?? 0) > maxPrice) {
-        return false; // Cena je vyššia ako maximálna povolená
-      }
-
-      // Podmienka pre viditeľnosť
-      // Predpokladáme, že Event má pole 'visibility' ('public' alebo 'private')
-      if (event.visibility != visibility) {
-        return false; // Nespĺňa podmienku viditeľnosti
-      }
-
-      // Podmienka pre dátum OD (ak je zadaný)
-      // Predpokladáme, že Event má pole 'eventDate'
-      if (dateFrom != null && event.eventDate!.isBefore(dateFrom)) {
-        return false; // Udalosť sa koná pred požadovaným dátumom
-      }
-
-      // Podmienka pre dátum DO (ak je zadaný)
-      if (dateTo != null && event.eventDate!.isAfter(dateTo)) {
-        return false; // Udalosť sa koná po požadovanom dátume
-      }
-
-      // Ak udalosť prešla všetkými kontrolami, zahrnieme ju do výsledku
-      return true;
-    }).toList();
-
-    // 3. Vytvoríme nový set markerov z vyfiltrovaných udalostí
-    final Set<Marker> filteredMarkers = filteredEvents.map((event) {
-      return event.toMarker(onTap: (e) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => EventDetailPage(event: e)),
-        );
-      });
-    }).toSet();
-
-    // 4. Aktualizujeme stav, aby sa mapa prekreslila s novými markermi
+    // Nevymazávame markery úplne, len ich „vizuálne nahradíme“ tými, ktoré sú viditeľné
     setState(() {
-      _markers.clear();
-      _markers.addAll(filteredMarkers);
+      _markers
+        ..clear()
+        ..addAll(visibleMarkers);
     });
   }
+
+  /// Pomocná funkcia, ktorá kontroluje, či event spĺňa aktuálne filtre
+  bool _matchesFilter(Event event) {
+    if (_filterName != null &&
+        _filterName!.isNotEmpty &&
+        !event.title.toLowerCase().contains(_filterName!.toLowerCase())) {
+      return false;
+    }
+
+    if (_filterCategory != null &&
+        _filterCategory!.isNotEmpty &&
+        event.category != _filterCategory) {
+      return false;
+    }
+
+    if (_filterParticipants != null &&
+        _filterParticipants! > 0 &&
+        (event.participants ?? 0) != _filterParticipants!) {
+      return false;
+    }
+
+    if (_filterMaxPrice != null &&
+        (event.price ?? 0) > _filterMaxPrice!) {
+      return false;
+    }
+
+    if (_filterVisibility != null &&
+        _filterVisibility!.isNotEmpty &&
+        event.visibility != _filterVisibility) {
+      return false;
+    }
+
+    if (_filterDateFrom != null &&
+        event.dateFrom != null &&
+        event.dateFrom!.isBefore(_filterDateFrom!)) {
+      return false;
+    }
+
+    if (_filterDateTo != null &&
+        event.dateTo != null &&
+        event.dateTo!.isAfter(_filterDateTo!)) {
+      return false;
+    }
+
+    return true;
+  }
 }
-
-
