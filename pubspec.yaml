@@ -34,6 +34,16 @@ dependencies:
   flutter_map: any
   latlong2: any
   google_place: ^0.4.7
+  firebase_core: ^3.15.2   # Pre inicializáciu Firebase
+  firebase_auth: ^5.7.0   # Pre Login/Register
+  cloud_firestore: ^5.6.12 # Pre ukladanie dát
+  dartz: ^0.10.1           # Pre Right/Left (úspech/chyba)
+  flutter_bloc: ^9.1.1
+  google_sign_in: ^6.2.1        # Pre Google
+  flutter_facebook_auth: ^6.0.4
+    # Apple je natívne podporovaný cez firebase_auth, ale pre natívny proces
+    # používame balíček sign_in_with_apple (akcie len na iOS/MacOS)
+  sign_in_with_apple: ^6.1.1    # Pre Apple
 
 
 
@@ -51,7 +61,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

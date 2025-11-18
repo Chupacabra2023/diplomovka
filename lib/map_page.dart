@@ -13,7 +13,7 @@ import 'profile_pages/my_created_events_page.dart';
 import 'profile_pages/recommended_events_page.dart';
 import 'profile_pages/my_invitations_page.dart';
 import 'profile_pages/settings_page.dart';
-import 'auth/logout_page.dart';
+import 'auth/auth_pages/logout_page.dart';
 import 'profile_pages/help_page.dart';
 
 
