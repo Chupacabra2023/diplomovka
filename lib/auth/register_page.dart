@@ -1,8 +1,8 @@
-import 'package:diplomovka/login_page.dart';
+import 'package:diplomovka/auth/login_page.dart';
 import 'package:flutter/material.dart';
 import 'login_service.dart';
 import 'user_credentials.dart';
-import 'map_page.dart';
+import '../map_page.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});

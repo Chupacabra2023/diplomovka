@@ -2,7 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'user_credentials.dart';
 import 'login_service.dart';
-import 'map_page.dart';
+import '../map_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});

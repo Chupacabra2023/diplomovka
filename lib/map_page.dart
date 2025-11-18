@@ -3,9 +3,21 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:google_place/google_place.dart';
 import 'dart:async';
 import 'event.dart'; // import novej triedy Event
-import 'event_create_information.dart';
+import 'event_creation_page.dart';
 import 'event_detail_page.dart';
-import 'place_autocomplete_field.dart';
+import 'google_search/place_autocomplete_field.dart';
+import 'event_filter_service.dart';
+import 'profile_pages/user_profile.dart';
+import 'profile_pages/my_visited_events_page.dart';
+import 'profile_pages/my_created_events_page.dart';
+import 'profile_pages/recommended_events_page.dart';
+import 'profile_pages/my_invitations_page.dart';
+import 'profile_pages/settings_page.dart';
+import 'auth/logout_page.dart';
+import 'profile_pages/help_page.dart';
+
+
+
 
 
 class GoogleMapPage extends StatefulWidget {
@@ -23,13 +35,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     zoom: 13,
   );
 
-  String? _filterName;
-  String? _filterCategory;
-  int? _filterParticipants;
-  double? _filterMaxPrice;
-  String? _filterVisibility;
-  DateTime? _filterDateFrom;
-  DateTime? _filterDateTo;
+
   final Set<Marker> _markers = {};
   final Map<MarkerId, Event> _markerEventMap = {};
 
@@ -114,13 +120,131 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Google Maps — Zoznamko')),
+      appBar: AppBar(
+        title: const Text('Google Maps — Zoznamko'),
+          actions: [
+            Builder(
+              builder: (context) => IconButton(
+                icon: const Icon(Icons.account_circle, size: 30),
+                onPressed: () {
+                  Scaffold.of(context).openEndDrawer(); // teraz to funguje
+                },
+              ),
+            ),
+          ],
+      ),
 
-      // TIETO DVA PARAMETRE PATRIA SEM:
+      endDrawer: SizedBox(
+        width: MediaQuery.of(context).size.width * 0.6, // napr. 60 % šírky obrazovky
+        child: Drawer(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              const DrawerHeader(
+                decoration: BoxDecoration(color: Colors.blue),
+                child: Text(
+                  '👤 Môj profil',
+                  style: TextStyle(color: Colors.white, fontSize: 20),
+                ),
+              ),
+
+              ListTile(
+                leading: const Icon(Icons.person),
+                title: const Text('Profil'),
+                onTap: () {
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (context) => const ProfileSettingsPage())
+                  );
+                }
+              ),
+              ExpansionTile(
+                leading: const Icon(Icons.event),
+                title: const Text('Moje udalosti'),
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.add_circle_outline),
+                    title: const Text('Vytvorené'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const MyCreatedEventsPage()),
+                      );
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.check_circle_outline),
+                    title: const Text('Navštívené'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const MyVisitedEventsPage()),
+                      );
+                    },
+                  ),
+
+                  ListTile(
+                    leading: const Icon(Icons.star),
+                    title: const Text('Oblubene'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const RecommendedEventsPage()),
+                      );
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.mail),
+                    title: const Text('Pozvánky'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const MyInvitationsPage()),
+                      );
+                    },
+                  ),
+                ],
+              ),
+
+              ListTile(
+                leading: const Icon(Icons.settings),
+                title: const Text('Nastavenia'),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const SettingsPage()),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text('Odhlásiť sa'),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const LogoutPage()),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.support),
+                title: const Text('Pomoc'),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const HelpPage()),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+      // 👉 tieto dve veci sú mimo body!
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
+          // Vytvoriť udalosť
           FloatingActionButton.extended(
             heroTag: "createEvent",
             icon: Icon(_isPicking ? Icons.check : Icons.event),
@@ -133,18 +257,34 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
               }
             },
           ),
-          FloatingActionButton.extended(
-            heroTag: "findEvent",
-            icon: const Icon(Icons.search),
-            label: const Text('Nájsť udalosť'),
-            onPressed: () {
-              _openFilterSheet(); // otvorí filter
-            },
-          ),
+
+          // Ak je v režime výberu — zobrazí sa tlačidlo ZRUŠIŤ
+          if (_isPicking)
+            FloatingActionButton.extended(
+              heroTag: "cancelPick",
+              backgroundColor: Colors.redAccent,
+              icon: const Icon(Icons.close),
+              label: const Text('Zrušiť'),
+              onPressed: () {
+                setState(() {
+                  _isPicking = false;
+                  _cameraCenter = null;
+                });
+              },
+            )
+          else
+          // Štandardné tlačidlo "Nájsť udalosť"
+            FloatingActionButton.extended(
+              heroTag: "findEvent",
+              icon: const Icon(Icons.search),
+              label: const Text('Nájsť udalosť'),
+              onPressed: () {
+                _openFilterSheet();
+              },
+            ),
         ],
       ),
 
-      // A SEM PATRÍ BODY SO STACK-om:
       body: Stack(
         children: [
           GoogleMap(
@@ -174,13 +314,16 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                 ),
               ),
             ),
-        ], // <-- TOTO JE KONIEC `children` PRE STACK
+        ],
       ),
     );
   }
 
+
+
   //event filtering
   void _openFilterSheet() {
+    final TextEditingController nameController = TextEditingController();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -190,8 +333,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
       builder: (context) {
         String selectedCategory = '';
         String selectedVisibility = 'public';
-        double maxPrice = 100.0;
-        String eventName = '';
+        double maxPrice = 0.0;
+        String eventName = 'wtf';
         int participants = 0;
         DateTime? dateFrom;
         DateTime? dateTo;
@@ -254,11 +397,14 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                     // NÁZOV
                     const Text("Názov udalosti"),
                     TextField(
+                      controller: nameController,
                       decoration: const InputDecoration(
                         hintText: "Zadaj názov...",
                         border: OutlineInputBorder(),
                       ),
-                      onChanged: (val) => setModalState(() => eventName = val),
+
+
+
                     ),
                     const SizedBox(height: 16),
 
@@ -267,7 +413,21 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                     DropdownButton<String>(
                       value: selectedCategory.isEmpty ? null : selectedCategory,
                       hint: const Text("Vyber kategóriu"),
-                      items: ['Hudba', 'Šport', 'Kultúra', 'Iné']
+                      items: [ "Hudba",
+                        "Šport",
+                        "Party",
+                        "Kultúrne podujatia", // zahŕňa Kino, Divadlo, Festivaly
+                        "Jedlo a pitie",
+                        "Gaming",
+                        "Príroda",
+                        "Rodina",
+                        "Umenie",
+                        "Fotografia",
+                        "Zdravie a fitness",
+                        "Dobrovoľníctvo",
+                        "Workshop",
+                        "Diskusia",
+                        "Iné"]
                           .map((cat) =>
                           DropdownMenuItem(value: cat, child: Text(cat)))
                           .toList(),
@@ -323,8 +483,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                     Slider(
                       value: maxPrice,
                       min: 0,
-                      max: 500,
-                      divisions: 50,
+                      max: 200,
+                      divisions: 200,
                       label: "${maxPrice.toStringAsFixed(0)} €",
                       onChanged: (val) => setModalState(() => maxPrice = val),
                     ),
@@ -367,8 +527,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                         ElevatedButton(
                           onPressed: () {
                             Navigator.pop(context);
+                            final name = nameController.text.trim();
                             _applyFilter(
-                              name: eventName,
+                              name: name.isNotEmpty ? name : null,
                               category: selectedCategory,
                               participants: participants,
                               maxPrice: maxPrice,
@@ -392,7 +553,6 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
       },
     );
   }
-
   void _applyFilter({
     String? name,
     String? category,
@@ -402,85 +562,40 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     DateTime? dateFrom,
     DateTime? dateTo,
   }) {
-    setState(() {
-      _filterName = name;
-      _filterCategory = category;
-      _filterParticipants = participants;
-      _filterMaxPrice = maxPrice;
-      _filterVisibility = visibility;
-      _filterDateFrom = dateFrom;
-      _filterDateTo = dateTo;
-    });
 
-    // Prejdeme všetky eventy
+    // 1. Vytvoríme objekt s kritériami
+    final criteria = FilterCriteria(
+      name: name,
+      category: category,
+      participants: participants,
+      maxPrice: maxPrice,
+      visibility: visibility,
+      dateFrom: dateFrom,
+      dateTo: dateTo,
+    );
+
+    // 2. Vytvoríme servisnú triedu
+    final filterService = EventFilterService(criteria);
+
+    // 3. Získame všetky udalosti a aplikujeme filter
     final allEvents = _markerEventMap.values.toList();
+    final filteredEvents = filterService.filter(allEvents);
 
-    // Nájdi markery, ktoré spĺňajú filter
-    final Set<Marker> visibleMarkers = {};
-    for (final event in allEvents) {
-      final matches = _matchesFilter(event);
-      if (matches) {
-        final marker = event.toMarker(onTap: (e) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => EventDetailPage(event: e)),
-          );
-        });
-        visibleMarkers.add(marker);
-      }
-    }
+    // 4. Z vyfiltrovaných udalostí vytvoríme markery
+    final Set<Marker> visibleMarkers = filteredEvents.map((event) {
+      return event.toMarker(onTap: (e) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => EventDetailPage(event: e)),
+        );
+      });
+    }).toSet();
 
-    // Nevymazávame markery úplne, len ich „vizuálne nahradíme“ tými, ktoré sú viditeľné
+    // 5. Aktualizujeme mapu
     setState(() {
       _markers
         ..clear()
         ..addAll(visibleMarkers);
     });
-  }
-
-  /// Pomocná funkcia, ktorá kontroluje, či event spĺňa aktuálne filtre
-  bool _matchesFilter(Event event) {
-    if (_filterName != null &&
-        _filterName!.isNotEmpty &&
-        !event.title.toLowerCase().contains(_filterName!.toLowerCase())) {
-      return false;
-    }
-
-    if (_filterCategory != null &&
-        _filterCategory!.isNotEmpty &&
-        event.category != _filterCategory) {
-      return false;
-    }
-
-    if (_filterParticipants != null &&
-        _filterParticipants! > 0 &&
-        (event.participants ?? 0) != _filterParticipants!) {
-      return false;
-    }
-
-    if (_filterMaxPrice != null &&
-        (event.price ?? 0) > _filterMaxPrice!) {
-      return false;
-    }
-
-    if (_filterVisibility != null &&
-        _filterVisibility!.isNotEmpty &&
-        event.visibility != _filterVisibility) {
-      return false;
-    }
-
-    if (_filterDateFrom != null &&
-        event.dateFrom != null &&
-        event.dateFrom!.isBefore(_filterDateFrom!)) {
-      return false;
-    }
-
-    if (_filterDateTo != null &&
-        event.dateTo != null &&
-        event.dateTo!.isAfter(_filterDateTo!)) {
-      return false;
-    }
-
-    return true;
   }
 }
