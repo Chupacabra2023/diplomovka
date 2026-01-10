@@ -60,6 +60,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   // Pridajte túto metódu do _GoogleMapPageState
   Future<void> _onPredictionSelected(AutocompletePrediction p) async {
     // Vytvorte si inštanciu GooglePlace tu, len pre túto metódu
+    // TODO: Nahraďte 'YOUR_API_KEY_HERE' svojím Google Places API kľúčom z .env súboru
     final googlePlace = GooglePlace("YOUR_API_KEY_HERE");
     final details = await googlePlace.details.get(p.placeId!);
     final loc = details?.result?.geometry?.location;

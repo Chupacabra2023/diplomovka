@@ -26,7 +26,7 @@ class _PlaceAutocompleteFieldState extends State<PlaceAutocompleteField> {
   @override
   void initState() {
     super.initState();
-    // Vložte svoj API kľúč sem
+    // TODO: Nahraďte 'YOUR_API_KEY_HERE' svojím Google Places API kľúčom z .env súboru
     _googlePlace = GooglePlace("YOUR_API_KEY_HERE");
     _searchCtrl.addListener(_onSearchChanged);
   }
