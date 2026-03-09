@@ -1,26 +1,21 @@
 package com.example.diplomovka_kotlin
 
-import android.content.Intent
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
-import com.example.diplomovka_kotlin.ui.auth.AuthActivity
-import com.example.diplomovka_kotlin.ui.map.MapActivity
-import com.google.firebase.auth.FirebaseAuth
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.material3.MaterialTheme
+import androidx.core.view.WindowCompat
+import com.example.diplomovka_kotlin.ui.App
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         super.onCreate(savedInstanceState)
-
-        // TODO: re-enable auth before release
-        // val user = FirebaseAuth.getInstance().currentUser
-        // if (user != null) {
-        //     startActivity(Intent(this, MapActivity::class.java))
-        // } else {
-        //     startActivity(Intent(this, AuthActivity::class.java))
-        // }
-        startActivity(Intent(this, MapActivity::class.java))
-
-        finish()
+        setContent {
+            MaterialTheme {
+                App()
+            }
+        }
     }
 }

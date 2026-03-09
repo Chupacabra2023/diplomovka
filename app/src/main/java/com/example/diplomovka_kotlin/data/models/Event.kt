@@ -1,5 +1,6 @@
 package com.example.diplomovka_kotlin.data.models
 
+import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
 import java.io.Serializable
@@ -7,6 +8,7 @@ import java.util.Date
 
 data class Event(
     val id: String,
+    val creatorId: String = "",
     val title: String,
     val latitude: Double,
     val longitude: Double,
@@ -18,25 +20,35 @@ data class Event(
     val price: Double = 0.0,
     val participants: Int = 0,
     val visibility: String = "public",
-    val category: String = ""
+    val password: String = "",
+    val category: String = "",
+    val subcategory: String = "",
+    val attendees: List<String> = emptyList(),
+    val imageUrl: String = ""
 ) : Serializable {
 
-    fun toMarkerOptions(): MarkerOptions =
-        MarkerOptions().position(LatLng(latitude, longitude)).title(title)
+    fun toMarkerOptions(icon: BitmapDescriptor? = null): MarkerOptions =
+        MarkerOptions()
+            .position(LatLng(latitude, longitude))
+            .title(title)
+            .apply { icon?.let { icon(it) } }
 
     fun toMap(): Map<String, Any?> = mapOf(
-        "id" to id, "title" to title,
+        "id" to id, "creatorId" to creatorId, "title" to title,
         "latitude" to latitude, "longitude" to longitude,
         "createdAt" to createdAt.time, "place" to place,
         "description" to description,
         "dateFrom" to dateFrom?.time, "dateTo" to dateTo?.time,
         "price" to price, "participants" to participants,
-        "visibility" to visibility, "category" to category
+        "visibility" to visibility, "password" to password, "category" to category,
+        "subcategory" to subcategory, "attendees" to attendees,
+        "imageUrl" to imageUrl
     )
 
     companion object {
         fun fromMap(map: Map<String, Any?>): Event = Event(
             id = map["id"] as String,
+            creatorId = map["creatorId"] as? String ?: "",
             title = map["title"] as String,
             latitude = (map["latitude"] as Number).toDouble(),
             longitude = (map["longitude"] as Number).toDouble(),
@@ -48,7 +60,11 @@ data class Event(
             price = (map["price"] as? Number)?.toDouble() ?: 0.0,
             participants = (map["participants"] as? Number)?.toInt() ?: 0,
             visibility = map["visibility"] as? String ?: "public",
-            category = map["category"] as? String ?: ""
+            password = map["password"] as? String ?: "",
+            category = map["category"] as? String ?: "",
+            subcategory = map["subcategory"] as? String ?: "",
+            attendees = (map["attendees"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            imageUrl = map["imageUrl"] as? String ?: ""
         )
 
         fun fromFirestore(id: String, data: Map<String, Any?>): Event =

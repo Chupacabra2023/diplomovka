@@ -1,26 +1,27 @@
 package com.example.diplomovka_kotlin.viewmodel
 
 import android.content.Context
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import com.example.diplomovka_kotlin.data.services.AuthService
 import com.example.diplomovka_kotlin.domain.LoginUserUseCase
 import com.google.firebase.auth.FirebaseAuthException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class LoginViewModel(private val context: Context) : ViewModel() {
 
     private val authService = AuthService(context)
     private val loginUseCase = LoginUserUseCase(authService)
 
-    private val _isLoading = MutableLiveData(false)
-    val isLoading: LiveData<Boolean> = _isLoading
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    private val _error = MutableLiveData<String?>(null)
-    val error: LiveData<String?> = _error
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error.asStateFlow()
 
     suspend fun login(email: String, password: String): Boolean {
-        if (_isLoading.value == true) return false
+        if (_isLoading.value) return false
         _isLoading.value = true
         _error.value = null
 
@@ -32,10 +33,7 @@ class LoginViewModel(private val context: Context) : ViewModel() {
                 "user-not-found", "wrong-password" -> "Neplatný e-mail alebo heslo."
                 "invalid-email"                    -> "Neplatný formát e-mailu."
                 "user-disabled"                    -> "Tento účet bol deaktivovaný."
-                "email-not-verified"               -> {
-                    authService.sendEmailVerification()
-                    e.message
-                }
+                "email-not-verified"               -> { authService.sendEmailVerification(); e.message }
                 else -> "Chyba pri prihlásení: ${e.message ?: e.errorCode}"
             }
             false

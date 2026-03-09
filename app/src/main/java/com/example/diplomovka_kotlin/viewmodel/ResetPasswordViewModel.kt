@@ -2,25 +2,26 @@ package com.example.diplomovka_kotlin.viewmodel
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
 import com.example.diplomovka_kotlin.data.services.AuthService
 import com.example.diplomovka_kotlin.domain.ResetPasswordUseCase
 import com.google.firebase.auth.FirebaseAuthException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class ResetPasswordViewModel(application: Application) : AndroidViewModel(application) {
 
     private val authService = AuthService(application)
     private val resetUseCase = ResetPasswordUseCase(authService)
 
-    private val _isLoading = MutableLiveData(false)
-    val isLoading: LiveData<Boolean> = _isLoading
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    private val _error = MutableLiveData<String?>(null)
-    val error: LiveData<String?> = _error
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error.asStateFlow()
 
     suspend fun sendResetEmail(email: String): Boolean {
-        if (_isLoading.value == true) return false
+        if (_isLoading.value) return false
         _isLoading.value = true
         _error.value = null
 

@@ -30,3 +30,11 @@ restriction on  adorid apps add android app  com.example.diplomovka_kotlin
   SHA-256: 9A:A1:03:DD:E2:31:DD:0C:D9:88:22:91:2D:E1:CD:C3:F6:A7:2E:9F:1A:CC:75:48:E1:0E:39:62:9D:42:EE:88
   Valid until: Saturday, September 18, 2055
   ----------
+
+  napiusat typkovi ze je appka hotova
+  dat ui na app google play
+  listnut futbal
+  jaspravim odpisat
+
+
+  moznost kliknut na uzivatela a vidiet.
