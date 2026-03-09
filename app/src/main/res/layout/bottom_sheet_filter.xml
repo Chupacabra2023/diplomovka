@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="🔍 Filtrovať udalosti" android:textSize="18sp" android:textStyle="bold"
+            android:layout_marginBottom="16dp"/>
+
+        <EditText android:id="@+id/etFilterName" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:hint="Zadaj názov..."
+            android:layout_marginBottom="16dp"/>
+
+        <Spinner android:id="@+id/spinnerCategory" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:layout_marginBottom="16dp"/>
+
+        <TextView android:id="@+id/tvParticipants" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:text="Počet osôb: 0"/>
+        <SeekBar android:id="@+id/seekBarParticipants" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:max="100" android:layout_marginBottom="16dp"/>
+
+        <TextView android:id="@+id/tvPrice" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:text="Max cena: 0 €"/>
+        <SeekBar android:id="@+id/seekBarPrice" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:max="200" android:layout_marginBottom="16dp"/>
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Dátum a čas"/>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginBottom="16dp">
+            <Button android:id="@+id/btnDateFrom" android:layout_width="0dp"
+                android:layout_height="wrap_content" android:layout_weight="1"
+                android:text="Vyber OD" android:layout_marginEnd="8dp"/>
+            <Button android:id="@+id/btnDateTo" android:layout_width="0dp"
+                android:layout_height="wrap_content" android:layout_weight="1"
+                android:text="Vyber DO"/>
+        </LinearLayout>
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Viditeľnosť"/>
+        <RadioGroup android:id="@+id/rgVisibility" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+            <RadioButton android:id="@+id/rbPublic" android:layout_width="0dp"
+                android:layout_height="wrap_content" android:layout_weight="1"
+                android:text="Verejná" android:checked="true"/>
+            <RadioButton android:id="@+id/rbPrivate" android:layout_width="0dp"
+                android:layout_height="wrap_content" android:layout_weight="1"
+                android:text="Súkromná"/>
+        </RadioGroup>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="end">
+            <Button android:id="@+id/btnCancel" style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Zrušiť"/>
+            <Button android:id="@+id/btnApply" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:text="Použiť"/>
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>
