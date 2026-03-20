@@ -11,9 +11,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.diplomovka_kotlin.ui.AppViewModel
 
 @Composable
-fun SettingsScreen(onLogoutClick: () -> Unit) {
+fun SettingsScreen(appViewModel: AppViewModel, onLogoutClick: () -> Unit) {
     var darkMode by remember { mutableStateOf(false) }
     var notifications by remember { mutableStateOf(true) }
     var selectedLanguage by remember { mutableStateOf("Slovensky") }
@@ -82,6 +83,25 @@ fun SettingsScreen(onLogoutClick: () -> Unit) {
                 Text(selectedLanguage, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Icon(Icons.Filled.ChevronRight, contentDescription = null)
             }
+        }
+
+        HorizontalDivider()
+
+        Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Okruh zobrazenia eventov", fontSize = 16.sp)
+                Text("${appViewModel.eventRadiusKm.toInt()} km",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Slider(
+                value = appViewModel.eventRadiusKm,
+                onValueChange = { appViewModel.setEventRadius(it) },
+                valueRange = 1f..50f
+            )
         }
 
         HorizontalDivider()

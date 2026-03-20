@@ -111,9 +111,9 @@ private fun EventCard(
             .clickable(onClick = onClick)
     ) {
         // ── Obrázok (ak existuje) ─────────────────────────────────────────────
-        if (event.imageUrl.isNotEmpty()) {
+        if (event.imageUrls.isNotEmpty()) {
             AsyncImage(
-                model = event.imageUrl,
+                model = event.imageUrls.first(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

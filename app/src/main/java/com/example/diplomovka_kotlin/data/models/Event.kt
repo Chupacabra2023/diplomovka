@@ -24,7 +24,12 @@ data class Event(
     val category: String = "",
     val subcategory: String = "",
     val attendees: List<String> = emptyList(),
-    val imageUrl: String = ""
+    val waitlist: List<String> = emptyList(),
+    val imageUrls: List<String> = emptyList(),
+    val rating: Double = 0.0,
+    val totalRatings: Int = 0,
+    val ratedBy: List<String> = emptyList(),
+    val bannedUsers: List<String> = emptyList()
 ) : Serializable {
 
     fun toMarkerOptions(icon: BitmapDescriptor? = null): MarkerOptions =
@@ -42,7 +47,9 @@ data class Event(
         "price" to price, "participants" to participants,
         "visibility" to visibility, "password" to password, "category" to category,
         "subcategory" to subcategory, "attendees" to attendees,
-        "imageUrl" to imageUrl
+        "waitlist" to waitlist, "imageUrls" to imageUrls,
+        "rating" to rating, "totalRatings" to totalRatings,
+        "ratedBy" to ratedBy, "bannedUsers" to bannedUsers
     )
 
     companion object {
@@ -64,7 +71,15 @@ data class Event(
             category = map["category"] as? String ?: "",
             subcategory = map["subcategory"] as? String ?: "",
             attendees = (map["attendees"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
-            imageUrl = map["imageUrl"] as? String ?: ""
+            waitlist  = (map["waitlist"]  as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            // backward compat: staré eventy mali imageUrl (String), nové majú imageUrls (List)
+            imageUrls = (map["imageUrls"] as? List<*>)?.filterIsInstance<String>()?.takeIf { it.isNotEmpty() }
+                ?: (map["imageUrl"] as? String)?.takeIf { it.isNotEmpty() }?.let { listOf(it) }
+                ?: emptyList(),
+            rating = (map["rating"] as? Number)?.toDouble() ?: 0.0,
+            totalRatings = (map["totalRatings"] as? Number)?.toInt() ?: 0,
+            ratedBy = (map["ratedBy"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            bannedUsers = (map["bannedUsers"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
         )
 
         fun fromFirestore(id: String, data: Map<String, Any?>): Event =

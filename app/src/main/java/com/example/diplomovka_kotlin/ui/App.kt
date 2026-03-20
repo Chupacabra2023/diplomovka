@@ -73,7 +73,8 @@ fun App() {
                         }
                         navController.navigate(Screen.Map.route) { popUpTo(0) { inclusive = true } }
                     },
-                    onForgotPasswordClick = { navController.navigate(Screen.ResetPassword.route) }
+                    onForgotPasswordClick = { navController.navigate(Screen.ResetPassword.route) },
+                    onBack = { navController.navigateUp() }
                 )
             }
 
@@ -81,7 +82,8 @@ fun App() {
                 val vm: RegisterViewModel = viewModel()
                 RegisterScreen(
                     vm = vm,
-                    onRegisterSuccess = { navController.navigate(Screen.Login.route) }
+                    onRegisterSuccess = { navController.navigate(Screen.Login.route) },
+                    onBack = { navController.navigateUp() }
                 )
             }
 
@@ -101,10 +103,19 @@ fun App() {
             composable(Screen.EventDetail.route) {
                 val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
                 appViewModel.selectedEvent?.let { event ->
+                    LaunchedEffect(event.id) {
+                        appViewModel.loadAttendeeProfiles(listOf(event.creatorId) + event.attendees)
+                        appViewModel.startChatListener(event.id)
+                    }
+                    DisposableEffect(event.id) {
+                        onDispose { appViewModel.stopChatListener() }
+                    }
                     EventDetailScreen(
                         event = event,
                         currentUserId = currentUserId,
                         isFavorite = appViewModel.isFavorite(event.id),
+                        chatMessages = appViewModel.chatMessages,
+                        attendeeProfiles = appViewModel.attendeeProfiles,
                         onBack = { navController.navigateUp() },
                         onEditClick = {
                             appViewModel.prepareCreation(event, fromMap = false)
@@ -112,6 +123,7 @@ fun App() {
                         },
                         onJoin = { appViewModel.joinEvent(event.id, currentUserId) },
                         onLeave = { appViewModel.leaveEvent(event.id, currentUserId) },
+                        onLeaveWaitlist = { appViewModel.leaveWaitlist(event.id, currentUserId) },
                         onDelete = {
                             appViewModel.deleteEvent(event.id)
                             navController.popBackStack(Screen.Map.route, false)
@@ -121,7 +133,18 @@ fun App() {
                             val fromName = appViewModel.currentUserProfile?.displayName
                                 ?: FirebaseAuth.getInstance().currentUser?.displayName ?: ""
                             appViewModel.sendInvitation(event, currentUserId, fromName, email)
-                        }
+                        },
+                        onCreatorClick = {
+                            appViewModel.loadPublicProfile(event.creatorId)
+                            navController.navigate(Screen.PublicProfile.route)
+                        },
+                        onRate = { stars -> appViewModel.rateEvent(event.id, currentUserId, stars) },
+                        onSendMessage = { text -> appViewModel.sendChatMessage(event.id, currentUserId, text) },
+                        onAttendeeClick = { uid ->
+                            appViewModel.loadPublicProfile(uid)
+                            navController.navigate(Screen.PublicProfile.route)
+                        },
+                        onRemoveAttendee = { uid -> appViewModel.removeAttendee(event.id, uid) }
                     )
                 }
             }
@@ -142,6 +165,45 @@ fun App() {
                         }
                     )
                 }
+            }
+
+            composable(Screen.PublicProfile.route) {
+                val profile = appViewModel.viewedProfile
+                if (profile != null) {
+                    val publicEvents = appViewModel.events.values
+                        .filter { it.creatorId == profile.uid && it.visibility == "public" }
+                        .sortedByDescending { it.createdAt }
+                    com.example.diplomovka_kotlin.ui.settings.PublicProfileScreen(
+                        profile = profile,
+                        events = publicEvents,
+                        onBack = { navController.navigateUp() },
+                        onEventClick = { event ->
+                            appViewModel.selectEvent(event)
+                            navController.navigate(Screen.EventDetail.route)
+                        }
+                    )
+                } else {
+                    Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                        CircularProgressIndicator(color = Color(0xFFFFB300))
+                    }
+                }
+            }
+
+            composable(Screen.FavoriteEvents.route) {
+                val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+                val favoriteIds = appViewModel.currentUserProfile?.favoriteEventIds ?: emptyList()
+                val favoriteEvents = appViewModel.events.values
+                    .filter { it.id in favoriteIds }
+                    .sortedByDescending { it.createdAt }
+                EventListScreen(
+                    title = "Obľúbené udalosti",
+                    events = favoriteEvents,
+                    onBack = { navController.navigateUp() },
+                    onEventClick = { event ->
+                        appViewModel.selectEvent(event)
+                        navController.navigate(Screen.EventDetail.route)
+                    }
+                )
             }
 
             composable(Screen.MyCreatedEvents.route) {
@@ -203,14 +265,8 @@ fun App() {
             }
 
             composable(Screen.RecommendedEvents.route) {
-                val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
-                val recommendedEvents = appViewModel.events.values
-                    .filter {
-                        it.visibility == "public"
-                            && currentUserId !in it.attendees
-                            && it.creatorId != currentUserId
-                    }
-                    .sortedByDescending { it.createdAt }
+                appViewModel.refreshRecommendations()
+                val recommendedEvents = appViewModel.recommendedEvents.map { it.event }
                 EventListScreen(
                     title = "Odporúčané udalosti",
                     events = recommendedEvents,
@@ -251,9 +307,10 @@ fun App() {
             }
 
             composable(Screen.Settings.route) {
-                SettingsScreen(onLogoutClick = {
-                    navController.navigate(Screen.Logout.route)
-                })
+                SettingsScreen(
+                    appViewModel = appViewModel,
+                    onLogoutClick = { navController.navigate(Screen.Logout.route) }
+                )
             }
 
             composable(Screen.Help.route) { HelpScreen() }
@@ -356,6 +413,7 @@ private fun AppDrawer(navController: NavController, onClose: () -> Unit) {
         Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
             DrawerItem(Icons.Filled.Person,  "Profil",               accentColor, textColor) { onClose(); navController.navigate(Screen.ProfileSettings.route) }
             DrawerItem(Icons.Filled.Event,        "Moje udalosti",        accentColor, textColor) { onClose(); navController.navigate(Screen.MyCreatedEvents.route) }
+            DrawerItem(Icons.Filled.Favorite,     "Obľúbené",             accentColor, textColor) { onClose(); navController.navigate(Screen.FavoriteEvents.route) }
             DrawerItem(Icons.Filled.EventAvailable, "Nadchádzajúce",     accentColor, textColor) { onClose(); navController.navigate(Screen.MyUpcomingEvents.route) }
             DrawerItem(Icons.Filled.History,      "História udalostí",   accentColor, textColor) { onClose(); navController.navigate(Screen.MyVisitedEvents.route) }
             DrawerItem(Icons.Filled.Star,         "Odporúčané",          accentColor, textColor) { onClose(); navController.navigate(Screen.RecommendedEvents.route) }

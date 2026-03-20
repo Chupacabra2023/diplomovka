@@ -10,13 +10,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -32,18 +36,23 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.diplomovka_kotlin.BuildConfig
 import com.example.diplomovka_kotlin.data.models.CATEGORY_MAP
 import com.example.diplomovka_kotlin.data.models.Event
-import com.google.firebase.storage.FirebaseStorage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.io.DataOutputStream
+import java.net.URL
+import javax.net.ssl.HttpsURLConnection
 import java.text.SimpleDateFormat
 import java.util.*
 
 private val DarkMapBackground = Color(0xFF1A1C1E)
 private val DarkAccent        = Color(0xFF2D2F31)
 private val PrimaryTextDark   = Color(0xFFE2E2E6)
-private val AccentColor       = Color(0xFFD0BCFF)
+private val AccentColor       = Color(0xFFFFB300)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,23 +65,26 @@ fun EventCreationScreen(
     val scope = rememberCoroutineScope()
     val formatter = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
 
-    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
-    var isUploading      by remember { mutableStateOf(false) }
+    // Nové URI vybrané z galérie
+    var selectedUris   by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    // Existujúce URL (pri editácii) — môže ich používateľ odstrániť
+    var existingUrls   by remember { mutableStateOf(event.imageUrls) }
+    var isUploading    by remember { mutableStateOf(false) }
 
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        selectedImageUri = uri
-    }
+    val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris -> selectedUris = selectedUris + uris }
 
-    var title          by remember { mutableStateOf(event.title) }
-    var description    by remember { mutableStateOf(event.description) }
-    var place          by remember { mutableStateOf(event.place) }
-    var price          by remember { mutableStateOf(if (event.price > 0) event.price.toString() else "") }
-    var participants   by remember { mutableStateOf(if (event.participants > 0) event.participants.toString() else "") }
-    var dateFrom          by remember { mutableStateOf(event.dateFrom) }
-    var durationMinutes   by remember { mutableStateOf(60) }
-    var showDurationMenu  by remember { mutableStateOf(false) }
-    var selectedCategory    by remember { mutableStateOf(event.category) }
-    var selectedSubcategory by remember { mutableStateOf(event.subcategory) }
+    var title          by remember(event.id) { mutableStateOf(event.title) }
+    var description    by remember(event.id) { mutableStateOf(event.description) }
+    var place          by remember(event.id) { mutableStateOf(event.place) }
+    var price          by remember(event.id) { mutableStateOf(if (event.price > 0) event.price.toString() else "") }
+    var participants   by remember(event.id) { mutableStateOf(if (event.participants > 0) event.participants.toString() else "") }
+    var dateFrom          by remember(event.id) { mutableStateOf(event.dateFrom) }
+    var durationMinutes   by remember(event.id) { mutableStateOf(60) }
+    var showDurationMenu  by remember(event.id) { mutableStateOf(false) }
+    var selectedCategory    by remember(event.id) { mutableStateOf(event.category) }
+    var selectedSubcategory by remember(event.id) { mutableStateOf(event.subcategory) }
     var expandedCategory    by remember { mutableStateOf(false) }
     var expandedSubcategory by remember { mutableStateOf(false) }
     val subcategories = CATEGORY_MAP[selectedCategory] ?: emptyList()
@@ -102,7 +114,7 @@ fun EventCreationScreen(
         focusedTextColor      = PrimaryTextDark,
         unfocusedTextColor    = PrimaryTextDark,
         focusedBorderColor    = AccentColor,
-        unfocusedBorderColor  = DarkAccent.copy(alpha = 0f).let { Color(0xFF4A4C4F) },
+        unfocusedBorderColor  = Color(0xFF4A4C4F),
         focusedLabelColor     = AccentColor,
         unfocusedLabelColor   = PrimaryTextDark.copy(alpha = 0.6f),
         cursorColor           = AccentColor,
@@ -132,37 +144,78 @@ fun EventCreationScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // ── Obrázok eventu ───────────────────────────────────────────────
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(DarkAccent)
-                    .border(1.dp, Color(0xFF4A4C4F), RoundedCornerShape(12.dp))
-                    .clickable { imagePicker.launch("image/*") },
-                contentAlignment = Alignment.Center
-            ) {
-                val displayUri = selectedImageUri
-                val existingUrl = event.imageUrl
-                when {
-                    displayUri != null -> AsyncImage(
-                        model = displayUri,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp))
-                    )
-                    existingUrl.isNotEmpty() -> AsyncImage(
-                        model = existingUrl,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp))
-                    )
-                    else -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Filled.AddPhotoAlternate, contentDescription = null,
-                            tint = AccentColor, modifier = Modifier.size(40.dp))
-                        Spacer(Modifier.height(8.dp))
-                        Text("Pridať fotku", color = PrimaryTextDark.copy(alpha = 0.6f), fontSize = 13.sp)
+
+            // ── Fotky ────────────────────────────────────────────────────────
+            val totalImages = existingUrls.size + selectedUris.size
+            if (totalImages == 0) {
+                // Prázdny placeholder — klik otvorí galériu
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(DarkAccent)
+                        .border(1.dp, Color(0xFF4A4C4F), RoundedCornerShape(12.dp))
+                        .clickable { imagePicker.launch("image/*") },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Filled.Add,
+                            contentDescription = null,
+                            tint = AccentColor,
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text("Pridať fotky", color = PrimaryTextDark.copy(alpha = 0.6f), fontSize = 13.sp)
+                    }
+                }
+            } else {
+                // Horizontálny scroll s thumbnailmi
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(end = 8.dp)
+                ) {
+                    // Existujúce URL
+                    itemsIndexed(existingUrls) { index, url ->
+                        ImageThumbnail(
+                            onRemove = { existingUrls = existingUrls.toMutableList().also { it.removeAt(index) } }
+                        ) {
+                            AsyncImage(
+                                model = url,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+                    // Nové vybrané URI
+                    itemsIndexed(selectedUris) { index, uri ->
+                        ImageThumbnail(
+                            onRemove = { selectedUris = selectedUris.toMutableList().also { it.removeAt(index) } }
+                        ) {
+                            AsyncImage(
+                                model = uri,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+                    // Tlačidlo pridať ďalšie
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .size(110.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(DarkAccent)
+                                .border(1.dp, Color(0xFF4A4C4F), RoundedCornerShape(10.dp))
+                                .clickable { imagePicker.launch("image/*") },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = "Pridať fotku",
+                                tint = AccentColor, modifier = Modifier.size(28.dp))
+                        }
                     }
                 }
             }
@@ -236,11 +289,7 @@ fun EventCreationScreen(
                 }
             }
 
-            // ── Hlavná kategória ─────────────────────────────────────────────
-            ExposedDropdownMenuBox(
-                expanded = expandedCategory,
-                onExpandedChange = { expandedCategory = it }
-            ) {
+            ExposedDropdownMenuBox(expanded = expandedCategory, onExpandedChange = { expandedCategory = it }) {
                 OutlinedTextField(
                     value = selectedCategory.ifEmpty { "Vybrať kategóriu" },
                     onValueChange = {}, readOnly = true,
@@ -249,30 +298,18 @@ fun EventCreationScreen(
                     modifier = Modifier.menuAnchor().fillMaxWidth(),
                     colors = fieldColors
                 )
-                ExposedDropdownMenu(
-                    expanded = expandedCategory,
-                    onDismissRequest = { expandedCategory = false },
-                    containerColor = DarkAccent
-                ) {
+                ExposedDropdownMenu(expanded = expandedCategory, onDismissRequest = { expandedCategory = false }, containerColor = DarkAccent) {
                     CATEGORY_MAP.keys.forEach { cat ->
                         DropdownMenuItem(
                             text = { Text(cat, color = if (cat == selectedCategory) AccentColor else PrimaryTextDark) },
-                            onClick = {
-                                selectedCategory = cat
-                                selectedSubcategory = ""
-                                expandedCategory = false
-                            }
+                            onClick = { selectedCategory = cat; selectedSubcategory = ""; expandedCategory = false }
                         )
                     }
                 }
             }
 
-            // ── Podkategória (len ak je vybraná hlavná) ──────────────────────
             if (selectedCategory.isNotEmpty()) {
-                ExposedDropdownMenuBox(
-                    expanded = expandedSubcategory,
-                    onExpandedChange = { expandedSubcategory = it }
-                ) {
+                ExposedDropdownMenuBox(expanded = expandedSubcategory, onExpandedChange = { expandedSubcategory = it }) {
                     OutlinedTextField(
                         value = selectedSubcategory.ifEmpty { "Vybrať podkategóriu" },
                         onValueChange = {}, readOnly = true,
@@ -281,11 +318,7 @@ fun EventCreationScreen(
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
                         colors = fieldColors
                     )
-                    ExposedDropdownMenu(
-                        expanded = expandedSubcategory,
-                        onDismissRequest = { expandedSubcategory = false },
-                        containerColor = DarkAccent
-                    ) {
+                    ExposedDropdownMenu(expanded = expandedSubcategory, onDismissRequest = { expandedSubcategory = false }, containerColor = DarkAccent) {
                         subcategories.forEach { sub ->
                             DropdownMenuItem(
                                 text = { Text(sub, color = if (sub == selectedSubcategory) AccentColor else PrimaryTextDark) },
@@ -296,11 +329,7 @@ fun EventCreationScreen(
                 }
             }
 
-            // ── Viditeľnosť ──────────────────────────────────────────────────
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(false to "Verejné", true to "Súkromné").forEach { (priv, label) ->
                     val selected = isPrivate == priv
                     Button(
@@ -316,23 +345,17 @@ fun EventCreationScreen(
 
             if (isPrivate) {
                 OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
+                    value = password, onValueChange = { password = it },
                     label = { Text("Heslo pre vstup") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
                     visualTransformation = if (showPassword)
                         androidx.compose.ui.text.input.VisualTransformation.None
                     else
                         androidx.compose.ui.text.input.PasswordVisualTransformation(),
                     trailingIcon = {
                         IconButton(onClick = { showPassword = !showPassword }) {
-                            Icon(
-                                if (showPassword) Icons.Filled.VisibilityOff
-                                else Icons.Filled.Visibility,
-                                contentDescription = null,
-                                tint = AccentColor
-                            )
+                            Icon(if (showPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                contentDescription = null, tint = AccentColor)
                         }
                     },
                     colors = fieldColors
@@ -351,54 +374,129 @@ fun EventCreationScreen(
                         Toast.makeText(context, "Prosím, zadaj popis udalosti.", Toast.LENGTH_SHORT).show()
                         return@Button
                     }
-                    val computedDateTo = dateFrom?.let {
-                        Date(it.time + durationMinutes * 60 * 1000L)
-                    }
+                    val computedDateTo = dateFrom?.let { Date(it.time + durationMinutes * 60 * 1000L) }
                     isUploading = true
                     scope.launch {
-                        val imageUrl = selectedImageUri?.let { uri ->
-                            try {
-                                val ref = FirebaseStorage.getInstance().reference
-                                    .child("events/${event.id}/cover.jpg")
-                                ref.putFile(uri).await()
-                                ref.downloadUrl.await().toString()
-                            } catch (e: Exception) {
-                                event.imageUrl
+                        try {
+                            var lastError: String? = null
+                            val uploadResults = selectedUris.map { uri ->
+                                try { uploadToCloudinary(context, uri, event.id) }
+                                catch (e: Exception) {
+                                    lastError = e.message
+                                    android.util.Log.e("EventCreation", "Upload zlyhal: ${e.message}", e)
+                                    null
+                                }
                             }
-                        } ?: event.imageUrl
-                        isUploading = false
-                        onSave(event.copy(
-                            title = title.trim(),
-                            description = description.trim(),
-                            place = place.trim(),
-                            price = price.toDoubleOrNull() ?: 0.0,
-                            participants = participants.toIntOrNull() ?: 0,
-                            dateFrom = dateFrom, dateTo = computedDateTo,
-                            visibility = if (isPrivate) "private" else "public",
-                            password = if (isPrivate) password else "",
-                            category = selectedCategory,
-                            subcategory = selectedSubcategory,
-                            imageUrl = imageUrl
-                        ))
+                            val uploadedUrls = uploadResults.filterNotNull()
+                            val failedCount = uploadResults.count { it == null }
+                            if (failedCount > 0) {
+                                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                    Toast.makeText(context, "Upload zlyhal: $lastError", Toast.LENGTH_LONG).show()
+                                }
+                            }
+
+                            onSave(event.copy(
+                                title = title.trim(),
+                                description = description.trim(),
+                                place = place.trim(),
+                                price = price.toDoubleOrNull() ?: 0.0,
+                                participants = participants.toIntOrNull() ?: 0,
+                                dateFrom = dateFrom, dateTo = computedDateTo,
+                                visibility = if (isPrivate) "private" else "public",
+                                password = if (isPrivate) password else "",
+                                category = selectedCategory,
+                                subcategory = selectedSubcategory,
+                                imageUrls = existingUrls + uploadedUrls
+                            ))
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Chyba pri ukladaní: ${e.message}", Toast.LENGTH_LONG).show()
+                        } finally {
+                            isUploading = false
+                        }
                     }
                 },
                 enabled = !isUploading,
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = AccentColor,
-                    contentColor = DarkMapBackground
-                )
+                colors = ButtonDefaults.buttonColors(containerColor = AccentColor, contentColor = DarkMapBackground)
             ) {
                 if (isUploading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = DarkMapBackground,
-                        strokeWidth = 2.dp
-                    )
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = DarkMapBackground, strokeWidth = 2.dp)
                 } else {
                     Text("Uložiť udalosť", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
             }
+        }
+    }
+}
+
+private suspend fun uploadToCloudinary(
+    context: android.content.Context,
+    uri: android.net.Uri,
+    eventId: String
+): String = withContext(Dispatchers.IO) {
+    val cloudName    = BuildConfig.CLOUDINARY_CLOUD_NAME
+    val uploadPreset = BuildConfig.CLOUDINARY_UPLOAD_PRESET
+
+    val boundary = "----FormBoundary${System.currentTimeMillis()}"
+    val url = URL("https://api.cloudinary.com/v1_1/$cloudName/image/upload")
+    val conn = (url.openConnection() as HttpsURLConnection).apply {
+        requestMethod = "POST"
+        doOutput = true
+        connectTimeout = 30_000
+        readTimeout = 60_000
+        setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+    }
+
+    val bytes = context.contentResolver.openInputStream(uri)!!.readBytes()
+
+    DataOutputStream(conn.outputStream).use { out ->
+        fun field(name: String, value: String) {
+            out.writeBytes("--$boundary\r\n")
+            out.writeBytes("Content-Disposition: form-data; name=\"$name\"\r\n\r\n")
+            out.writeBytes("$value\r\n")
+        }
+        field("upload_preset", uploadPreset)
+        out.writeBytes("--$boundary\r\n")
+        out.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"image.jpg\"\r\n")
+        out.writeBytes("Content-Type: image/jpeg\r\n\r\n")
+        out.write(bytes)
+        out.writeBytes("\r\n--$boundary--\r\n")
+    }
+
+    val responseCode = conn.responseCode
+    val response = if (responseCode in 200..299) {
+        conn.inputStream.bufferedReader().readText()
+    } else {
+        val error = conn.errorStream?.bufferedReader()?.readText() ?: "HTTP $responseCode"
+        throw Exception("Cloudinary error $responseCode: $error")
+    }
+    JSONObject(response).getString("secure_url")
+}
+
+@Composable
+private fun ImageThumbnail(
+    onRemove: () -> Unit,
+    content: @Composable BoxScope.() -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(110.dp)
+            .clip(RoundedCornerShape(10.dp))
+    ) {
+        content()
+        // X tlačidlo
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(4.dp)
+                .size(22.dp)
+                .clip(CircleShape)
+                .background(Color(0xCC1A1C1E))
+                .clickable { onRemove() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Filled.Close, contentDescription = "Odstrániť",
+                tint = Color.White, modifier = Modifier.size(14.dp))
         }
     }
 }

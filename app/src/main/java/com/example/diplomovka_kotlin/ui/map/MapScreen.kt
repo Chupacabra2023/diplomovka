@@ -68,7 +68,7 @@ private val DarkMapBackground = Color(0xFF1A1C1E)
 private val DarkAccent        = Color(0xFF2D2F31)
 private val BottomPanelWhite  = Color(0xCCFFFFFF)
 private val PrimaryTextDark   = Color(0xFFE2E2E6)
-private val AccentColor       = Color(0xFFD0BCFF)
+private val AccentColor       = Color(0xFFFFB300)
 
 // ── Čierny marker ────────────────────────────────────────────────────────────
 private fun blackMarkerIcon(context: android.content.Context): BitmapDescriptor {
@@ -112,6 +112,8 @@ fun MapScreen(
         )
     }
     var userLocation by remember { mutableStateOf<LatLng?>(null) }
+    var hasMovedToUser by remember { mutableStateOf(false) }
+    var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -130,13 +132,25 @@ fun MapScreen(
             LocationServices.getFusedLocationProviderClient(context)
                 .lastLocation
                 .addOnSuccessListener { loc ->
-                    loc?.let { userLocation = LatLng(it.latitude, it.longitude) }
+                    loc?.let {
+                        userLocation = LatLng(it.latitude, it.longitude)
+                        appViewModel.updateUserLocation(it.latitude, it.longitude)
+                    }
                 }
         }
     }
 
-    var googleMap      by remember { mutableStateOf<GoogleMap?>(null) }
+    // Auto-center na polohu používateľa pri prvom získaní
+    LaunchedEffect(userLocation) {
+        val loc = userLocation ?: return@LaunchedEffect
+        if (!hasMovedToUser) {
+            googleMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(loc, 13f))
+            hasMovedToUser = true
+        }
+    }
+
     val markers        = remember { mutableMapOf<String, Marker>() }
+    var radiusCircle   by remember { mutableStateOf<com.google.android.gms.maps.model.Circle?>(null) }
     var isPicking      by remember { mutableStateOf(false) }
     var cameraCenter   by remember { mutableStateOf<LatLng?>(null) }
     var selectedAddress by remember { mutableStateOf<String?>(null) }
@@ -162,29 +176,47 @@ fun MapScreen(
         onDispose { lifecycle.removeObserver(observer) }
     }
 
-    // Sledujeme zmeny v events (aj async načítanie z Firestore) a sync-ujeme markery
+    // Sledujeme zmeny v events, polohe a okruhu — sync markery + filter podľa okruhu
     val currentUserId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: ""
     val blackIcon = remember { blackMarkerIcon(context) }
     LaunchedEffect(googleMap) {
         val map = googleMap ?: return@LaunchedEffect
-        snapshotFlow { appViewModel.events.toMap() }.collect { events ->
-            // Pridaj markery — súkromné eventy len pre ich tvorcu
-            events.values
-                .filter { it.visibility == "public" || it.creatorId == currentUserId }
-                .forEach { event ->
-                if (!markers.containsKey(event.id)) {
-                    val marker = map.addMarker(event.toMarkerOptions(blackIcon))
-                    marker?.tag = event.id
-                    if (marker != null) markers[event.id] = marker
+        snapshotFlow { Triple(appViewModel.events.toMap(), userLocation, appViewModel.eventRadiusKm) }
+            .collect { (events, location, radius) ->
+                events.values
+                    .filter { it.visibility == "public" || it.creatorId == currentUserId }
+                    .forEach { event ->
+                        if (!markers.containsKey(event.id)) {
+                            val marker = map.addMarker(event.toMarkerOptions(blackIcon))
+                            marker?.tag = event.id
+                            if (marker != null) markers[event.id] = marker
+                        }
+                        // Filtruj podľa okruhu (ak poloha nie je dostupná, zobraz všetko)
+                        val inRadius = location == null ||
+                            distanceKm(location, LatLng(event.latitude, event.longitude)) <= radius
+                        markers[event.id]?.isVisible = inRadius
+                    }
+                markers.keys.toList().filter { !events.containsKey(it) }.forEach { id ->
+                    markers[id]?.remove()
+                    markers.remove(id)
                 }
+                appViewModel.consumeNewEvent()
             }
-            // Odstráň markery pre vymazané eventy
-            markers.keys.toList().filter { !events.containsKey(it) }.forEach { id ->
-                markers[id]?.remove()
-                markers.remove(id)
-            }
-            appViewModel.consumeNewEvent()
-        }
+    }
+
+    // Kruh okruhu na mape
+    LaunchedEffect(googleMap, userLocation, appViewModel.eventRadiusKm) {
+        val map = googleMap ?: return@LaunchedEffect
+        radiusCircle?.remove()
+        val location = userLocation ?: return@LaunchedEffect
+        radiusCircle = map.addCircle(
+            com.google.android.gms.maps.model.CircleOptions()
+                .center(location)
+                .radius(appViewModel.eventRadiusKm * 1000.0)
+                .strokeColor(android.graphics.Color.argb(200, 0xFF, 0xB3, 0x00))
+                .fillColor(android.graphics.Color.argb(20, 0xFF, 0xB3, 0x00))
+                .strokeWidth(4f)
+        )
     }
 
     // Zmena štýlu mapy
@@ -367,9 +399,19 @@ fun MapScreen(
             events = appViewModel.events.values.toList(),
             markers = markers,
             userLocation = userLocation,
+            initialRadius = appViewModel.eventRadiusKm,
+            filterState = appViewModel.filterState,
+            onRadiusChange = { appViewModel.setEventRadius(it) },
+            onFilterStateChange = { appViewModel.updateFilterState(it) },
             onDismiss = { showFilter = false }
         )
     }
+}
+
+private fun distanceKm(a: LatLng, b: LatLng): Float {
+    val results = FloatArray(1)
+    android.location.Location.distanceBetween(a.latitude, a.longitude, b.latitude, b.longitude, results)
+    return results[0] / 1000f
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -390,18 +432,22 @@ private fun FilterBottomSheet(
     events: List<Event>,
     markers: Map<String, Marker>,
     userLocation: LatLng?,
+    initialRadius: Float,
+    filterState: com.example.diplomovka_kotlin.ui.FilterState,
+    onRadiusChange: (Float) -> Unit,
+    onFilterStateChange: (com.example.diplomovka_kotlin.ui.FilterState) -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     val formatter = SimpleDateFormat("dd.MM. HH:mm", Locale.getDefault())
 
-    var name                by remember { mutableStateOf("") }
-    var selectedCategory    by remember { mutableStateOf("") }
-    var selectedSubcategory by remember { mutableStateOf("") }
-    var participants        by remember { mutableStateOf(0f) }
-    var maxPrice            by remember { mutableStateOf(500f) }
-    var maxDistance         by remember { mutableStateOf(50f) }
-    var dateFrom            by remember { mutableStateOf<Date?>(null) }
+    var name                by remember { mutableStateOf(filterState.name) }
+    var selectedCategory    by remember { mutableStateOf(filterState.category) }
+    var selectedSubcategory by remember { mutableStateOf(filterState.subcategory) }
+    var participants        by remember { mutableStateOf(filterState.participants) }
+    var maxPrice            by remember { mutableStateOf(filterState.maxPrice) }
+    var maxDistance         by remember { mutableStateOf(initialRadius) }
+    var dateFrom            by remember { mutableStateOf(filterState.dateFrom) }
     var expandedCategory    by remember { mutableStateOf(false) }
     var expandedSubcategory by remember { mutableStateOf(false) }
 
@@ -523,11 +569,11 @@ private fun FilterBottomSheet(
                 valueRange = 0f..200f, colors = sliderColors)
 
             Text(
-                if (maxPrice >= 500f) "Max cena: bez obmedzenia" else "Max cena: ${"%.0f".format(maxPrice)} €",
+                if (maxPrice >= 150f) "Max cena: bez obmedzenia" else "Max cena: ${"%.0f".format(maxPrice)} €",
                 color = AccentColor
             )
             Slider(value = maxPrice, onValueChange = { maxPrice = it },
-                valueRange = 0f..500f, colors = sliderColors)
+                valueRange = 0f..150f, colors = sliderColors)
 
             Text(
                 if (userLocation == null) "Vzdialenosť: poloha nedostupná"
@@ -567,7 +613,7 @@ private fun FilterBottomSheet(
                             category = selectedCategory.ifEmpty { null },
                             subcategory = selectedSubcategory.ifEmpty { null },
                             participants = participants.toInt().takeIf { it > 0 },
-                            maxPrice = maxPrice.toDouble(),
+                            maxPrice = if (maxPrice >= 150f) Double.MAX_VALUE else maxPrice.toDouble(),
                             dateFrom = dateFrom,
                             maxDistanceKm = if (userLocation != null && maxDistance < 50f) maxDistance.toDouble() else null,
                             refLat = userLocation?.latitude ?: 0.0,
@@ -576,6 +622,17 @@ private fun FilterBottomSheet(
                         val filtered = EventFilterService(criteria).filter(events)
                         markers.values.forEach { it.isVisible = false }
                         filtered.forEach { event -> markers[event.id]?.isVisible = true }
+                        if (userLocation != null) onRadiusChange(maxDistance)
+                        onFilterStateChange(
+                            com.example.diplomovka_kotlin.ui.FilterState(
+                                name = name.trim(),
+                                category = selectedCategory,
+                                subcategory = selectedSubcategory,
+                                participants = participants,
+                                maxPrice = maxPrice,
+                                dateFrom = dateFrom
+                            )
+                        )
                         onDismiss()
                     },
                     modifier = Modifier.weight(1f),

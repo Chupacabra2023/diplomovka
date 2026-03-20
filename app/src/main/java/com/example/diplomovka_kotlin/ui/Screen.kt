@@ -19,4 +19,6 @@ sealed class Screen(val route: String) {
     object Contact : Screen("contact")
     object Logout : Screen("logout")
     object JoinPrivateEvent : Screen("join_private_event")
+    object FavoriteEvents : Screen("favorite_events")
+    object PublicProfile : Screen("public_profile")
 }

@@ -31,10 +31,11 @@ restriction on  adorid apps add android app  com.example.diplomovka_kotlin
   Valid until: Saturday, September 18, 2055
   ----------
 
-  napiusat typkovi ze je appka hotova
-  dat ui na app google play
+
+
+
   listnut futbal
-  jaspravim odpisat
 
 
+co dorobit v diplomovke
   moznost kliknut na uzivatela a vidiet.

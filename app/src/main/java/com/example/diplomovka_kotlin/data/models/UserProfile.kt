@@ -7,7 +7,8 @@ data class UserProfile(
     val photoUrl: String = "",
     val bio: String = "",
     val preferredCategories: List<String> = emptyList(),
-    val favoriteEventIds: List<String> = emptyList()
+    val favoriteEventIds: List<String> = emptyList(),
+    val visitedEventIds: List<String> = emptyList()
 ) {
     fun toMap(): Map<String, Any?> = mapOf(
         "displayName" to displayName,
@@ -15,7 +16,8 @@ data class UserProfile(
         "photoUrl" to photoUrl,
         "bio" to bio,
         "preferredCategories" to preferredCategories,
-        "favoriteEventIds" to favoriteEventIds
+        "favoriteEventIds" to favoriteEventIds,
+        "visitedEventIds" to visitedEventIds
     )
 
     companion object {
@@ -26,7 +28,8 @@ data class UserProfile(
             photoUrl = data["photoUrl"] as? String ?: "",
             bio = data["bio"] as? String ?: "",
             preferredCategories = (data["preferredCategories"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
-            favoriteEventIds = (data["favoriteEventIds"] as? List<String>)?.filterIsInstance<String>() ?: emptyList()
+            favoriteEventIds = (data["favoriteEventIds"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            visitedEventIds = (data["visitedEventIds"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
         )
     }
 }
